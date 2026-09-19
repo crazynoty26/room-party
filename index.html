@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Room Party</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+
+  <main class="app">
+
+    <section id="homeScreen">
+      <h1>ROOM PARTY</h1>
+      <p>Create a live room or join your friend's room.</p>
+
+      <div class="card">
+
+        <input
+          id="playerName"
+          type="text"
+          placeholder="Your Name"
+          autocomplete="off"
+        >
+
+        <input
+          id="roomPassword"
+          type="password"
+          placeholder="Room Password / PIN (optional)"
+          autocomplete="off"
+        >
+
+        <button id="createRoomBtn">
+          Create Room
+        </button>
+
+        <div class="divider">OR</div>
+
+        <input
+          id="roomCodeInput"
+          type="text"
+          placeholder="Enter Room Code"
+          autocomplete="off"
+        >
+
+        <button id="joinRoomBtn">
+          Join Room
+        </button>
+
+      </div>
+    </section>
+
+    <section id="roomScreen" class="hidden">
+
+      <div class="room-header card">
+
+        <p>Your Party Room</p>
+
+        <div id="roomName" class="room-code">
+          ------
+        </div>
+
+        <div class="room-actions">
+          <button id="copyRoomBtn">Copy Code</button>
+          <button id="shareRoomBtn">Share Room</button>
+          <button id="lockRoomBtn" class="secondary">
+            Lock Room
+          </button>
+          <button id="leaveRoomBtn" class="danger">
+            Leave Room
+          </button>
+        </div>
+
+      </div>
+
+      <section class="card">
+
+        <h2>Party Seats</h2>
+
+        <div id="seatsGrid" class="seats-grid"></div>
+
+      </section>
+
+      <section class="card">
+
+        <h2>Members</h2>
+
+        <ul id="membersList"></ul>
+
+        <div class="activity-control">
+          <label for="activityStatus">Your Status</label>
+          <select id="activityStatus">
+            <option value="online">🟢 Online</option>
+            <option value="away">🟡 Away</option>
+          </select>
+        </div>
+
+      </section>
+
+      <section class="card">
+
+        <h2>Voice Party</h2>
+
+        <button id="voiceBtn">
+          Join Voice
+        </button>
+
+        <button id="muteBtn" class="secondary hidden">
+          Mute
+        </button>
+
+        <div id="voiceStatus">
+          Voice not connected
+        </div>
+
+      </section>
+
+      <section class="card">
+
+        <h2>Live Chat</h2>
+
+        <div id="chatMessages"></div>
+
+        <form id="chatForm">
+
+          <input
+            id="chatInput"
+            type="text"
+            placeholder="Type a message..."
+            autocomplete="off"
+          >
+
+          <button type="submit">
+            Send
+          </button>
+
+        </form>
+
+      </section>
+
+    </section>
+
+    <div id="status"></div>
+
+  </main>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="js/script.js"></script>
+
+</body>
+</html>
++
