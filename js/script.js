@@ -33,6 +33,7 @@ const status = document.getElementById("status");
 
 const voicePeers = new Map();
 let voiceStream = null;
+let serverMuted = false;
 let voiceJoined = false;
 
 const voiceConfig = {
@@ -132,19 +133,104 @@ function renderMembers() {
 
     const hostText =
       member.id === currentHostId
-        ? " 👑 Host"
+        ? " 👑 HOST"
+        : "";
+
+    const adminText =
+      member.isAdmin === true
+        ? " 🛡️ ADMIN"
         : "";
 
     const statusText =
       member.activityStatus === "away"
-        ? " 🟡 Away"
-        : " 🟢 Online";
+        ? " • Away"
+        : " • Online";
 
-    name.textContent = member.name + hostText + statusText;
+    name.textContent =
+      member.name + hostText + adminText + statusText;
 
     row.appendChild(name);
 
-    if (currentHostId === socket.id && member.id !== socket.id) {
+    const isHost = currentHostId === socket.id;
+    const currentMemberIsAdmin =
+      currentMembers.find((m) => m.id === socket.id)?.isAdmin === true;
+
+    const targetIsHost = member.id === currentHostId;
+    const targetIsAdmin = member.isAdmin === true;
+
+    // Host controls
+    if (isHost && !targetIsHost) {
+      const controls = document.createElement("div");
+      controls.style.display = "flex";
+      controls.style.gap = "6px";
+      controls.style.flexWrap = "wrap";
+
+      const adminBtn = document.createElement("button");
+
+      adminBtn.textContent = targetIsAdmin
+        ? "Remove Admin"
+        : "Make Admin";
+
+      adminBtn.style.width = "auto";
+      adminBtn.style.minHeight = "40px";
+      adminBtn.style.marginTop = "0";
+      adminBtn.style.padding = "8px 12px";
+
+      adminBtn.addEventListener("click", () => {
+        socket.emit("set-admin", {
+          memberId: member.id,
+          isAdmin: !targetIsAdmin
+        });
+      });
+
+      controls.appendChild(adminBtn);
+
+      const muteBtnMember = document.createElement("button");
+
+      muteBtnMember.textContent = "Mute";
+      muteBtnMember.style.width = "auto";
+      muteBtnMember.style.minHeight = "40px";
+      muteBtnMember.style.marginTop = "0";
+      muteBtnMember.style.padding = "8px 12px";
+
+      muteBtnMember.addEventListener("click", () => {
+        socket.emit("mute-member", {
+          memberId: member.id
+        });
+      });
+
+      controls.appendChild(muteBtnMember);
+
+      if (!targetIsAdmin) {
+        const removeBtn = document.createElement("button");
+
+        removeBtn.textContent = "Remove";
+        removeBtn.className = "danger";
+        removeBtn.style.width = "auto";
+        removeBtn.style.minHeight = "40px";
+        removeBtn.style.marginTop = "0";
+        removeBtn.style.padding = "8px 12px";
+
+        removeBtn.addEventListener("click", () => {
+          socket.emit("remove-member", {
+            memberId: member.id
+          });
+        });
+
+        controls.appendChild(removeBtn);
+      }
+
+      row.appendChild(controls);
+    }
+
+    // Admin controls: normal members only.
+    if (
+      !isHost &&
+      currentMemberIsAdmin &&
+      !targetIsHost &&
+      !targetIsAdmin &&
+      member.id !== socket.id
+    ) {
       const removeBtn = document.createElement("button");
 
       removeBtn.textContent = "Remove";
@@ -160,7 +246,22 @@ function renderMembers() {
         });
       });
 
+      const muteBtnMember = document.createElement("button");
+
+      muteBtnMember.textContent = "Mute";
+      muteBtnMember.style.width = "auto";
+      muteBtnMember.style.minHeight = "40px";
+      muteBtnMember.style.marginTop = "0";
+      muteBtnMember.style.padding = "8px 12px";
+
+      muteBtnMember.addEventListener("click", () => {
+        socket.emit("mute-member", {
+          memberId: member.id
+        });
+      });
+
       row.appendChild(removeBtn);
+      row.appendChild(muteBtnMember);
     }
 
     li.appendChild(row);
@@ -385,6 +486,8 @@ voiceBtn.addEventListener("click", async () => {
 
     socket.emit("voice-leave");
 
+    serverMuted = false;
+
     cleanupAllVoicePeers();
 
     if (voiceStream) {
@@ -425,8 +528,26 @@ voiceBtn.addEventListener("click", async () => {
   }
 });
 
+socket.on("admin-muted", () => {
+  serverMuted = true;
+
+  if (voiceStream) {
+    voiceStream.getAudioTracks().forEach((track) => {
+      track.enabled = false;
+    });
+  }
+
+  muteBtn.textContent = "Unmute";
+  voiceStatus.textContent = "Muted by admin";
+});
+
 muteBtn.addEventListener("click", () => {
   if (!voiceStream) {
+    return;
+  }
+
+  if (serverMuted) {
+    voiceStatus.textContent = "Muted by admin";
     return;
   }
 
@@ -562,6 +683,8 @@ function stopVoice() {
   if (voiceJoined) {
     socket.emit("voice-leave");
   }
+
+  serverMuted = false;
 
   voiceJoined = false;
   cleanupAllVoicePeers();

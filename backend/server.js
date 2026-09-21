@@ -51,7 +51,8 @@ function getMembers(room) {
     name: member.name,
     seat: member.seat,
     isHost: member.id === room.hostId,
-    activityStatus: member.activityStatus
+    activityStatus: member.activityStatus,
+    isAdmin: member.isAdmin === true
   }));
 }
 
@@ -112,24 +113,33 @@ function leaveRoom(socket, announce = true) {
     return;
   }
 
+  // Host is the permanent owner.
+  // If the host leaves, close the room instead of transferring ownership.
+  if (room.hostId === socket.id) {
+    io.to(code).emit("room-closed", {
+      reason: "Host left the room."
+    });
+
+    for (const memberId of room.members.keys()) {
+      const memberSocket = io.sockets.sockets.get(memberId);
+
+      if (memberSocket) {
+        memberSocket.leave(code);
+        memberSocket.currentRoom = null;
+      }
+    }
+
+    rooms.delete(code);
+    socket.currentRoom = null;
+    return;
+  }
+
   room.members.delete(socket.id);
 
   if (announce) {
     io.to(code).emit("system-message", {
       text: `${member.name} left the room.`
     });
-  }
-
-  if (room.hostId === socket.id) {
-    const nextMember = room.members.values().next().value;
-
-    if (nextMember) {
-      room.hostId = nextMember.id;
-
-      io.to(code).emit("system-message", {
-        text: `${nextMember.name} is now the host.`
-      });
-    }
   }
 
   socket.leave(code);
@@ -142,7 +152,6 @@ function leaveRoom(socket, announce = true) {
 
   sendRoomUpdate(code);
 }
-
 io.on("connection", (socket) => {
   console.log("Connected:", socket.id);
 
@@ -332,53 +341,173 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("remove-member", (data = {}) => {
-    const code = socket.currentRoom;
-    const room = rooms.get(code);
+  socket.on("set-admin", (data = {}) => {
+  const code = socket.currentRoom;
+  const room = rooms.get(code);
 
-    if (!room) {
-      return;
-    }
+  if (!room) {
+    return;
+  }
 
-    if (room.hostId !== socket.id) {
-      sendError(socket, "Only the host can remove members.");
-      return;
-    }
+  if (room.hostId !== socket.id) {
+    sendError(socket, "Only the host can manage admins.");
+    return;
+  }
 
-    const targetId = String(data.memberId || "");
+  const targetId = String(data.memberId || "");
+  const makeAdmin = data.isAdmin === true;
 
-    if (!targetId || targetId === socket.id) {
-      return;
-    }
+  if (!targetId || targetId === socket.id) {
+    return;
+  }
 
-    const target = room.members.get(targetId);
+  const target = room.members.get(targetId);
 
-    if (!target) {
-      return;
-    }
+  if (!target) {
+    return;
+  }
 
-    const targetSocket = io.sockets.sockets.get(targetId);
+  if (target.id === room.hostId) {
+    sendError(socket, "The host is always the owner.");
+    return;
+  }
 
-    room.members.delete(targetId);
+  target.isAdmin = makeAdmin;
 
-    if (targetSocket) {
-      targetSocket.leave(code);
-      targetSocket.currentRoom = null;
-      targetSocket.emit("removed-from-room");
-    }
-
-    io.to(code).emit("system-message", {
-      text: `${target.name} was removed from the room.`
-    });
-
-    sendRoomUpdate(code);
+  io.to(code).emit("system-message", {
+    text: makeAdmin
+      ? `${target.name} is now an admin.`
+      : `${target.name} is no longer an admin.`
   });
 
-  socket.on("leave-room", () => {
+  sendRoomUpdate(code);
+});
+
+socket.on("remove-member", (data = {}) => {
+  const code = socket.currentRoom;
+  const room = rooms.get(code);
+
+  if (!room) {
+    return;
+  }
+
+  const actor = room.members.get(socket.id);
+
+  if (!actor) {
+    return;
+  }
+
+  const targetId = String(data.memberId || "");
+
+  if (!targetId || targetId === socket.id) {
+    return;
+  }
+
+  const target = room.members.get(targetId);
+
+  if (!target) {
+    return;
+  }
+
+  const actorIsHost = room.hostId === socket.id;
+  const actorIsAdmin = actor.isAdmin === true;
+  const targetIsHost = room.hostId === targetId;
+  const targetIsAdmin = target.isAdmin === true;
+
+  if (!actorIsHost && !actorIsAdmin) {
+    sendError(socket, "Only the host or an admin can remove members.");
+    return;
+  }
+
+  if (targetIsHost) {
+    sendError(socket, "The host cannot be removed.");
+    return;
+  }
+
+  if (targetIsAdmin && !actorIsHost) {
+    sendError(socket, "Admins cannot remove another admin.");
+    return;
+  }
+
+  const targetSocket = io.sockets.sockets.get(targetId);
+
+  room.members.delete(targetId);
+
+  if (targetSocket) {
+    targetSocket.leave(code);
+    targetSocket.currentRoom = null;
+    targetSocket.emit("removed-from-room");
+  }
+
+  io.to(code).emit("system-message", {
+    text: `${target.name} was removed from the room.`
+  });
+
+  sendRoomUpdate(code);
+});
+
+socket.on("leave-room", () => {
     leaveRoom(socket, true);
   });
 
-  socket.on("voice-join", () => {
+  socket.on("mute-member", (data = {}) => {
+  const code = socket.currentRoom;
+  const room = rooms.get(code);
+
+  if (!room) {
+    return;
+  }
+
+  const actor = room.members.get(socket.id);
+
+  if (!actor) {
+    return;
+  }
+
+  const targetId = String(data.memberId || "");
+
+  if (!targetId || targetId === socket.id) {
+    return;
+  }
+
+  const target = room.members.get(targetId);
+
+  if (!target) {
+    return;
+  }
+
+  const actorIsHost = room.hostId === socket.id;
+  const actorIsAdmin = actor.isAdmin === true;
+  const targetIsHost = room.hostId === targetId;
+  const targetIsAdmin = target.isAdmin === true;
+
+  if (!actorIsHost && !actorIsAdmin) {
+    sendError(socket, "Only the host or an admin can mute members.");
+    return;
+  }
+
+  if (targetIsHost) {
+    sendError(socket, "The host cannot be muted.");
+    return;
+  }
+
+  if (targetIsAdmin && !actorIsHost) {
+    sendError(socket, "Admins cannot mute another admin.");
+    return;
+  }
+
+  target.serverMuted = true;
+
+  io.to(targetId).emit("admin-muted", {
+    by: socket.id
+  });
+
+  io.to(code).emit("system-message", {
+    text: `${target.name} was muted by ${actor.name}.`
+  });
+});
+
+socket.on("voice-join", () => {
     const code = socket.currentRoom;
 
     if (!code || !rooms.has(code)) {
