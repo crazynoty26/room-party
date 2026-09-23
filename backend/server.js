@@ -63,7 +63,7 @@ function getMembers(room) {
   return Array.from(room.members.values()).map((member) => ({
     id: member.id,
     name: member.name,
-    playerId,
+    playerId: member.playerId,
 
     seat: member.seat,
     isHost: member.id === room.hostId,
@@ -172,17 +172,17 @@ io.on("connection", (socket) => {
   console.log("Connected:", socket.id);
 
   socket.on("create-room", (data = {}) => {
-    if (socket.currentRoom) {
-      leaveRoom(socket, false);
-    }
+  if (socket.currentRoom) {
+    leaveRoom(socket, false);
+  }
 
-    const name = String(data.name || "Player").trim() || "Player";
-    const password = String(data.password || "").trim();
+  const name = String(data.name || "Player").trim() || "Player";
+  const password = String(data.password || "").trim();
   const playerId = String(data.playerId || "");
 
-    const code = createRoomCode();
+  const code = createRoomCode();
 
-    const room = {
+  const room = {
     hostId: socket.id,
     password,
     locked: false,
@@ -191,103 +191,101 @@ io.on("connection", (socket) => {
   };
 
   room.members.set(socket.id, {
-      id: socket.id,
-      name,
-    playerId: member.playerId,
-
-      seat: 1,
-      activityStatus: "online"
-    });
-
-    rooms.set(code, room);
-
-    socket.playerName = name;
-    socket.currentRoom = code;
-    socket.join(code);
-
-    socket.emit("room-created", {
-      code,
-      hostId: socket.id,
-      locked: false,
-      members: getMembers(room),
-      maxSeats: MAX_SEATS
-    });
-
-    sendRoomUpdate(code);
-
-    console.log(`${name} created room ${code}`);
+    id: socket.id,
+    name,
+    playerId: playerId,
+    seat: 1,
+    activityStatus: "online"
   });
 
-  socket.on("join-room", (data = {}) => {
-    const code = String(data.code || "").trim().toUpperCase();
-    const name = String(data.name || "Player").trim() || "Player";
-    const password = String(data.password || "").trim();
+  rooms.set(code, room);
+
+  socket.playerName = name;
+  socket.currentRoom = code;
+  socket.join(code);
+
+  socket.emit("room-created", {
+    code,
+    hostId: socket.id,
+    locked: false,
+    members: getMembers(room),
+    maxSeats: MAX_SEATS
+  });
+
+  sendRoomUpdate(code);
+
+  console.log(`${name} created room ${code}`);
+});
+
+socket.on("join-room", (data = {}) => {
+  const code = String(data.code || "").trim().toUpperCase();
+  const name = String(data.name || "Player").trim() || "Player";
+  const password = String(data.password || "").trim();
   const playerId = String(data.playerId || "");
 
-    const room = rooms.get(code);
+  const room = rooms.get(code);
 
-    if (!room) {
-      sendError(socket, "Room not found.");
-      return;
-    }
+  if (!room) {
+    sendError(socket, "Room not found.");
+    return;
+  }
 
-    if (room.locked) {
-      sendError(socket, "Room is locked.");
-      return;
-    }
+  if (room.locked) {
+    sendError(socket, "Room is locked.");
+    return;
+  }
 
-    if (room.password && room.password !== password) {
-      sendError(socket, "Wrong room password/PIN.");
-      return;
-    }
+  if (room.password && room.password !== password) {
+    sendError(socket, "Wrong room password/PIN.");
+    return;
+  }
 
-    if (room.members.size >= MAX_SEATS) {
-      sendError(socket, "Room is full.");
-      return;
-    }
+  if (room.members.size >= MAX_SEATS) {
+    sendError(socket, "Room is full.");
+    return;
+  }
 
-    if (socket.currentRoom && socket.currentRoom !== code) {
-      leaveRoom(socket, false);
-    }
+  if (socket.currentRoom && socket.currentRoom !== code) {
+    leaveRoom(socket, false);
+  }
 
-    const seat = getFreeSeat(room);
+  const seat = getFreeSeat(room);
 
-    if (!seat) {
-      sendError(socket, "No empty seat available.");
-      return;
-    }
+  if (!seat) {
+    sendError(socket, "No empty seat available.");
+    return;
+  }
 
-    room.members.set(socket.id, {
-      id: socket.id,
-      name,
+  room.members.set(socket.id, {
+    id: socket.id,
+    name,
     playerId: member.playerId,
-
-      seat,
-      activityStatus: "online"
-    });
-
-    socket.playerName = name;
-    socket.currentRoom = code;
-    socket.join(code);
-
-    socket.emit("room-joined", {
-      code,
-      hostId: room.hostId,
-      locked: room.locked,
-      members: getMembers(room),
-      maxSeats: MAX_SEATS
-    });
-
-    io.to(code).emit("system-message", {
-      text: `${name} joined the room.`
-    });
-
-    sendRoomUpdate(code);
-
-    console.log(`${name} joined room ${code}`);
+    seat,
+    activityStatus: "online"
   });
 
-  socket.on("toggle-room-lock", () => {
+  socket.playerName = name;
+  socket.currentRoom = code;
+  socket.join(code);
+
+  socket.emit("room-joined", {
+    code,
+    hostId: room.hostId,
+    locked: room.locked,
+    members: getMembers(room),
+    maxSeats: MAX_SEATS
+  });
+
+  io.to(code).emit("system-message", {
+    text: `${name} joined the room.`
+  });
+
+  sendRoomUpdate(code);
+
+  console.log(`${name} joined room ${code}`);
+});
+
+socket.on("toggle-room-lock", () => {
     const code = socket.currentRoom;
     const room = rooms.get(code);
 
