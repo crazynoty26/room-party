@@ -42,12 +42,34 @@ let voiceStream = null;
 let serverMuted = false;
 let voiceJoined = false;
 
-const voiceConfig = {
+let voiceConfig = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" }
   ]
 };
+
+let voiceConfigReady = null;
+
+async function loadVoiceConfig() {
+  try {
+    const response = await fetch("/api/voice-config");
+
+    if (!response.ok) {
+      throw new Error("Voice config request failed");
+    }
+
+    const config = await response.json();
+
+    if (config && Array.isArray(config.iceServers) && config.iceServers.length) {
+      voiceConfig = config;
+    }
+  } catch (error) {
+    console.warn("TURN config unavailable, using fallback STUN.", error);
+  }
+}
+
+voiceConfigReady = loadVoiceConfig();
 
 let currentRoomCode = "";
 let currentHostId = "";
@@ -398,7 +420,11 @@ async function createVoicePeer(targetId, makeOffer = false) {
     return;
   }
 
-  const peer = new RTCPeerConnection(voiceConfig);
+  if (voiceConfigReady) {
+  await voiceConfigReady;
+}
+
+const peer = new RTCPeerConnection(voiceConfig);
 
   voicePeers.set(targetId, peer);
 

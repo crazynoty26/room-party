@@ -28,6 +28,21 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
+app.get("/api/voice-config", (req, res) => {
+  const username = process.env.TURN_USERNAME || "";
+  const credential = process.env.TURN_PASSWORD || "";
+
+  res.json({
+    iceServers: [
+      { urls: "stun:stun.relay.metered.ca:80" },
+      { urls: "turn:global.relay.metered.ca:80", username, credential },
+      { urls: "turn:global.relay.metered.ca:80?transport=tcp", username, credential },
+      { urls: "turn:global.relay.metered.ca:443", username, credential },
+      { urls: "turns:global.relay.metered.ca:443?transport=tcp", username, credential }
+    ]
+  });
+});
+
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "..", "index.html"));
 });
