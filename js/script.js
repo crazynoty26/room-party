@@ -421,11 +421,10 @@ async function createVoicePeer(targetId, makeOffer = false) {
   }
 
   if (voiceConfigReady) {
-  await voiceConfigReady;
-}
+    await voiceConfigReady;
+  }
 
-const peer = new RTCPeerConnection(voiceConfig);
-
+  const peer = new RTCPeerConnection(voiceConfig);
   voicePeers.set(targetId, peer);
 
   voiceStream.getTracks().forEach((track) => {
