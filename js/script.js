@@ -355,7 +355,10 @@ lockRoomBtn.addEventListener("click", () => {
 leaveRoomBtn.addEventListener("click", () => {
   if (!joinedRoom) return;
 
-  stopVoice();
+  shouldAutoRejoin = false;
+ reconnectRoomCode = "";
+ reconnectRoomPassword = "";
+ stopVoice();
   socket.emit("leave-room");
 });
 
@@ -717,6 +720,15 @@ socket.on("removed-from-room", () => {
 
 socket.on("connect", () => {
   setStatus("Connected");
+if (shouldAutoRejoin && reconnectRoomCode) {
+  reconnectingRoom = true;
+  socket.emit("join-room", {
+    name: playerName.value.trim() || "Player",
+    code: reconnectRoomCode,
+    password: reconnectRoomPassword,
+    playerId
+  });
+}
 });
 
 function stopVoice() {
@@ -744,7 +756,7 @@ socket.on("disconnect", () => {
 });
 
 socket.on("room-created", (data) => {
-  joinedRoom = true;
+  joinedRoom = true; shouldAutoRejoin = true; reconnectRoomCode = data.code; reconnectRoomPassword = roomPassword.value;
   chatMessages.innerHTML = "";
 
   renderRoom(data);
@@ -752,7 +764,7 @@ socket.on("room-created", (data) => {
 });
 
 socket.on("room-joined", (data) => {
-  joinedRoom = true;
+  joinedRoom = true; shouldAutoRejoin = true; reconnectRoomCode = data.code; reconnectRoomPassword = roomPassword.value;
   chatMessages.innerHTML = "";
 
   renderRoom(data);
@@ -782,6 +794,10 @@ socket.on("chat-message", (data) => {
 });
 
 socket.on("room-error", (message) => {
+shouldAutoRejoin = false;
+reconnectingRoom = false;
+reconnectRoomCode = "";
+reconnectRoomPassword = "";
   setStatus(message);
 });
 
