@@ -3,6 +3,7 @@ const http = require("http");
 const path = require("path");
 const cors = require("cors");
 const { Server } = require("socket.io");
+const db = require("./database");
 
 const app = express();
 const server = http.createServer(app);
@@ -199,6 +200,8 @@ io.on("connection", (socket) => {
   });
 
   rooms.set(code, room);
+  db.prepare("INSERT INTO rooms (code, password, locked, host_player_id) VALUES (?, ?, ?, ?)").run(code, password, 0, playerId);
+  db.prepare("INSERT INTO room_members (room_code, player_id, name, seat, is_admin, activity_status) VALUES (?, ?, ?, ?, ?, ?)").run(code, playerId, name, 1, 1, "online");
 
   socket.playerName = name;
   socket.currentRoom = code;
