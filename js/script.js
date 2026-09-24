@@ -360,6 +360,15 @@ leaveRoomBtn.addEventListener("click", () => {
  reconnectRoomPassword = "";
  stopVoice();
   socket.emit("leave-room");
+joinedRoom = false;
+currentRoomCode = "";
+currentMembers = [];
+shouldAutoRejoin = false;
+reconnectingRoom = false;
+reconnectRoomCode = "";
+reconnectRoomPassword = "";
+showHome();
+setStatus("You left the room.");
 });
 
 copyRoomBtn.addEventListener("click", async () => {

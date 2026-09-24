@@ -20,6 +20,31 @@ const io = new Server(server, {
 const PORT = process.env.PORT || 3000;
 const MAX_SEATS = 8;
 const rooms = new Map();
+const savedRooms = db.prepare("SELECT code, password, locked, host_player_id FROM rooms").all();
+for (const savedRoom of savedRooms) {
+  rooms.set(savedRoom.code, {
+    hostId: null,
+    hostPlayerId: savedRoom.host_player_id,
+    password: savedRoom.password || "",
+    locked: Boolean(savedRoom.locked),
+    members: new Map(),
+    bannedPlayers: new Set()
+  });
+}
+console.log("Restored rooms from database:", rooms.size);
+const savedMembers = db.prepare("SELECT room_code, player_id, name, seat, is_admin, activity_status FROM room_members").all();
+for (const member of savedMembers) {
+  const room = rooms.get(member.room_code);
+  if (!room) continue;
+  room.members.set("db:" + member.player_id, {
+    id: "db:" + member.player_id,
+    name: member.name,
+    playerId: member.player_id,
+    seat: member.seat,
+    activityStatus: "offline",
+    isAdmin: Boolean(member.is_admin)
+  });
+}
 
 app.use(cors());
 app.use(express.json());
@@ -111,47 +136,28 @@ function getFreeSeat(room) {
 
 function leaveRoom(socket, announce = true) {
   const code = socket.currentRoom;
-
-  if (!code) {
-    return;
-  }
+  if (!code) return;
 
   const room = rooms.get(code);
-
   if (!room) {
     socket.currentRoom = null;
     return;
   }
 
   const member = room.members.get(socket.id);
-
   if (!member) {
     socket.currentRoom = null;
     return;
   }
 
-  // Host is the permanent owner.
-  // If the host leaves, close the room instead of transferring ownership.
-  if (room.hostId === socket.id) {
-    io.to(code).emit("room-closed", {
-      reason: "Host left the room."
-    });
+  member.activityStatus = "offline";
 
-    for (const memberId of room.members.keys()) {
-      const memberSocket = io.sockets.sockets.get(memberId);
+  db.prepare(
+    "UPDATE room_members SET activity_status = 'offline', updated_at = CURRENT_TIMESTAMP WHERE room_code = ? AND player_id = ?"
+  ).run(code, member.playerId);
 
-      if (memberSocket) {
-        memberSocket.leave(code);
-        memberSocket.currentRoom = null;
-      }
-    }
-
-    rooms.delete(code);
-    socket.currentRoom = null;
-    return;
-  }
-
-  room.members.delete(socket.id);
+  socket.leave(code);
+  socket.currentRoom = null;
 
   if (announce) {
     io.to(code).emit("system-message", {
@@ -159,16 +165,9 @@ function leaveRoom(socket, announce = true) {
     });
   }
 
-  socket.leave(code);
-  socket.currentRoom = null;
-
-  if (room.members.size === 0) {
-    rooms.delete(code);
-    return;
-  }
-
   sendRoomUpdate(code);
 }
+
 io.on("connection", (socket) => {
   console.log("Connected:", socket.id);
 
@@ -226,13 +225,11 @@ socket.on("join-room", (data = {}) => {
   const password = String(data.password || "").trim();
   const playerId = String(data.playerId || "");
 
-  const room = rooms.get(code);
-
-  if (!room) {
-    sendError(socket, "Room not found.");
-    return;
-  }
-
+    const room = rooms.get(code);
+    if (!room) {
+      sendError(socket, "Room not found.");
+      return;
+    }
   if (room.locked) {
     sendError(socket, "Room is locked.");
     return;
@@ -262,11 +259,12 @@ socket.on("join-room", (data = {}) => {
   room.members.set(socket.id, {
     id: socket.id,
     name,
-    playerId: member.playerId,
+    playerId: playerId,
     seat,
     activityStatus: "online"
   });
 
+    db.prepare("INSERT OR REPLACE INTO room_members (room_code, player_id, name, seat, is_admin, activity_status) VALUES (?, ?, ?, ?, ?, ?)").run(code, playerId, name, seat, 0, "online");
   socket.playerName = name;
   socket.currentRoom = code;
   socket.join(code);
@@ -338,7 +336,7 @@ socket.on("toggle-room-lock", () => {
     io.to(code).emit("chat-message", {
       id: socket.id,
       name: member.name,
-    playerId: member.playerId,
+    playerId: playerId,
 
       message,
       time: Date.now()
