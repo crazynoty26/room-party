@@ -76,6 +76,9 @@ let currentHostId = "";
 let currentLocked = false;
 let currentMembers = [];
 let joinedRoom = false;
+let shouldAutoRejoin = false;
+let wasConnected = false;
+let reconnectingRoom = false;
 
 function setStatus(message) {
   status.textContent = message;
@@ -703,6 +706,10 @@ socket.on("removed-from-room", () => {
   joinedRoom = false;
   currentRoomCode = "";
   currentMembers = [];
+  shouldAutoRejoin = false;
+  reconnectingRoom = false;
+  reconnectRoomCode = "";
+  reconnectRoomPassword = "";
 
   showHome();
   setStatus("You were removed from the room.");
